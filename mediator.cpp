@@ -1,6 +1,8 @@
 #include "mediator.h"
 
 #include <imessage-queue-events.h>
+#include <message_impl.h>
+#include <message-queue_impl.h>
 
 #include <iostream>
 
@@ -53,6 +55,6 @@ void Mediator::setStopped(bool stopped)
         return;
 
     mStopped = stopped;
-    mQueue.setEvent(mq::Events::on_stop);
+    mQueue.stop();
     emit stoppedChanged(mStopped);
 }

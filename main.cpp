@@ -2,7 +2,7 @@
 #include "reader.h"
 
 #include <writer.h>
-#include <message-queue.h>
+#include <message-queue_impl.h>
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -15,7 +15,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app {argc, argv};
 
-    mq::MessageQueue<mq::MessageType> queue {50000, 10, 90};
+    mq::MessageQueue<mq::MessageType> queue {30000, 10, 90};
 
     Reader reader {queue, std::clog};
     reader.run();

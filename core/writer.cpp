@@ -1,11 +1,36 @@
 #include "writer.h"
+#include "message_impl.h"
+#include "message-queue_impl.h"
 
 #include <random>
 
 namespace mq {
+Writer::Writer(MessageQueue<MessageType> &rqueue) :
+    mMessageQueue(rqueue)
+{
+    mMessageQueue.setEvent(this);
+    mMessage.generate();
+}
+
 void Writer::run()
 {
     mThread = ThreadWrapper([&](const BlockingToken &token){write(token);});
+}
+
+void Writer::on_start() {
+    mState = WriterState::Start;
+}
+
+void Writer::on_stop() {
+    mState = WriterState::Stop;
+}
+
+void Writer::on_hwm() {
+    mState = WriterState::Hwm;
+}
+
+void Writer::on_lwm() {
+    mState = WriterState::Lwm;
 }
 
 void Writer::write(const BlockingToken &token)
@@ -14,9 +39,9 @@ void Writer::write(const BlockingToken &token)
         if(mMessage.empty())
             mMessage.generate();
 
-        if(state() == Events::on_stop)
+        if(mState == WriterState::Stop)
             break;
-        if(state() == Events::on_hwm)
+        if(mState == WriterState::Hwm)
             continue;
 
         const auto retVal = mMessageQueue.put(mMessage);

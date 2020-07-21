@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imessage-queue-events.h"
+#include "return-codes.h"
 
 #include <queue>
 #include <cmath>
@@ -16,14 +17,12 @@ const auto MessageCompare = [](const auto& lhs, const auto& rhs) {
     return lhs > rhs;
 };
 
-enum class RetCodes{
-    OK = 0,
-    HWM = -1,
-    NO_SPACE = -2,
-    STOPPED = -3
+enum class QueueState {
+    Start,
+    Stop,
+    Hwm,
+    Lwm
 };
-
-class IMessageQueueEvents;
 
 /**
  * @brief Класс очереди сообщений
@@ -39,26 +38,13 @@ public:
     MessageQueue() = delete;
     MessageQueue(const MessageQueue &) = delete;
     MessageQueue(const MessageQueue &&) = delete;
-    MessageQueue(unsigned int size, unsigned short lwm = 10, unsigned short hwm = 90) :
-        mSize(size),
-        mCurrentSize(0),
-        mLwm(conversionWaterMark(lwm, false)),
-        mHwm(conversionWaterMark(hwm, true)),
-        mMutex(),
-        mSubscribeMutex(),
-        mCv(),
-        mState(Events::on_start),
-        mSubscribers(),
-        mQueue(MessageCompare)
-    {
-        static_assert(std::is_same<std::pair<Type, Identifier>,
-                      typename Sequence::value_type>::value,
-                      "Type for MessageQueue must be the same as the container");
-        assert (fixedSize() > 2 && "Size MessageQueue less than 3");
-    }
+    MessageQueue(unsigned int size,
+                 unsigned short lwm = 10,
+                 unsigned short hwm = 90);
 
     MessageQueue& operator=(const MessageQueue &) = delete;
     MessageQueue& operator=(MessageQueue &&) = delete;
+
     ~MessageQueue() = default;
 
     /**
@@ -69,23 +55,7 @@ public:
      * Уведомляет "читателей" о поступлении первого сообщения
      * Функция потокобезопасна.
      */
-    RetCodes put(const Type &message) {
-        if (currentSize() < mHwm) {
-            std::lock_guard<std::mutex> guard(mMutex);
-            mQueue.emplace(std::make_pair(std::move(message),
-                                          std::chrono::steady_clock::now()));
-            mCurrentSize = mQueue.size();
-            if(currentSize() == 1)
-                mCv.notify_all();
-        } else {
-            notifySubscribers(Events::on_hwm);
-            return RetCodes::HWM;
-        }
-        if(mState == Events::on_stop) {
-            return RetCodes::STOPPED;
-        }
-        return RetCodes::OK;
-    }
+    RetCodes put(const Type &message);
 
     /**
      * @brief get
@@ -94,128 +64,75 @@ public:
      * Учитывает события и коды возврата.
      * Функция потокобезопасна.
      */
-    RetCodes get(Type &type) {
-        if(mState == Events::on_stop)
-            return RetCodes::STOPPED;
-        std::unique_lock<std::mutex> lk(mMutex);
-        mCv.wait(lk, [this] {
-            return (!mQueue.empty() || mState == Events::on_stop);
-        });
-        if (mQueue.empty())
-            return RetCodes::STOPPED;
-        type = mQueue.top().first;
-        mQueue.pop();
-        mCurrentSize = mQueue.size();
-        if(currentSize() <= mLwm)
-            notifySubscribers(Events::on_lwm);
-        return RetCodes::OK;
-    }
-
-    size_t currentSize() const {
-        return mCurrentSize;
-    }
-
-    size_t fixedSize() const {
-        return mSize;
-    }
+    RetCodes get(Type &type);
 
     /**
      * @brief setEvent
-     * @details Функция установки состояния
+     * @details Функция подписки. Использует интерфейс IMessageQueueEvents
+     * для передачи события.
      */
-    void setEvent(Events event) {
-        if (event == Events::on_stop) {
-            notifySubscribers(Events::on_stop);
-            mCv.notify_all();
-        }
-        if (mState == event)
-            return;
-        mState = event;
-    }
+    void setEvent(IMessageQueueEvents *event);
 
     /**
-     * @brief subscribe
-     * @details подписка "писателей"
+     * @brief stop
+     * @details Уведомляет писателей о прекращении работы
      */
-    void subscribe(IMessageQueueEvents *writer) {
-        std::lock_guard<std::mutex> guard(mSubscribeMutex);
-        mSubscribers.push_back(writer);
-    }
+    void stop();
 
     /**
-     * @brief setLwm
-     * @details установка значения Lwm
+     * @brief setLwm - необходимо для демонстрации работы
+     * @details установка значения Lwm.
      * @param lwmThreshold - значение в процентах
      */
-    void setLwm(unsigned short lwmThreshold = 10) {
-        mLwm = conversionWaterMark(lwmThreshold, false);
-    }
+    void setLwm(unsigned short lwmThreshold = 10);
 
     /**
-     * @brief setHwm
+     * @brief setHwm - необходимо для демонстрации работы
      * @details установка значения Hwm
      * @param hwmThreshold - значение в процентах
      */
-    void setHwm(unsigned short hwmThreshold = 90) {
-        mHwm = conversionWaterMark(hwmThreshold, true);
-    }
+    void setHwm(unsigned short hwmThreshold = 90);
 
-    double percentFullnessQueue() const {
-        const auto curSize {currentSize()};
-        const auto fixSize {fixedSize()};
+    /**
+     * @brief percentFullnessQueue - возвращает заполненность очереди
+     * необходимо для демонстрации работы
+     */
+    double percentFullnessQueue() const;
 
-        if (curSize < fixSize)
-            return ((curSize * 100.0) / fixSize);
+    /**
+     * @brief getPercentWaterMark - возвращает процент WaterMark
+     * необходимо для демонстрации работы
+     */
+    unsigned int getPercentWaterMark(bool inHwm) const;
 
-        return 100.0;
-    }
-
-    unsigned int getPercentWaterMark(bool inHwm) const {
-        const auto factor = inHwm ? static_cast<double>(mHwm * 100.):
-                                    static_cast<double>(mLwm * 100.);
-        if (inHwm) {
-            return std::ceil(factor / fixedSize());
-        } else {
-            return std::floor(factor / fixedSize());
-        }
-    }
+    /**
+     * @brief fixedSize - возвращает размер очереди
+     * необходимо для демонстрации работы
+     */
+    size_t fixedSize() const;
 private:
-    unsigned int conversionWaterMark(unsigned short wmPercent, bool inHwm) const {
-        assert(wmPercent >= 0 && wmPercent <= 100);
-        const auto factor = static_cast<double>(wmPercent / 100.);
-        if (inHwm) {
-            return std::ceil(fixedSize() * factor);
-        } else {
-            return std::floor(fixedSize() * factor);
-        }
-    }
+
+    /**
+     * @brief conversionWaterMark - переводит hwm/lwm
+     */
+    unsigned int conversionWaterMark(unsigned short wmPercent, bool inHwm) const;
 
     /**
      * @brief notifySubscribers
-     * @details Уведомление подписчиков о смене состояния
+     * @details Уведомление подписчиков о пришедшем событии
      */
-    void notifySubscribers(Events event) {
-        std::lock_guard<std::mutex> guard(mSubscribeMutex);
-        std::for_each(mSubscribers.begin(),
-                      mSubscribers.end(),
-                      [event](IMessageQueueEvents *subscriber){
-            subscriber->applyEvent(event);
-        });
-    }
+    void notifySubscribers(QueueState state);
 
 private:
     const size_t mSize;
     std::atomic_size_t mCurrentSize;
     std::atomic_uint mLwm, mHwm;
-
     std::mutex mMutex, mSubscribeMutex;
     std::condition_variable mCv;
-
-    Events mState;
+    std::atomic<QueueState> mState;
     std::vector<IMessageQueueEvents *> mSubscribers;
-
     std::priority_queue<std::pair<Type, Identifier>,
-    Sequence,
-    decltype (MessageCompare)> mQueue;
+                        Sequence,
+                        decltype (MessageCompare)> mQueue;
 };
 }

@@ -1,7 +1,6 @@
 import QtQuick 2.12
 import QtQuick.Controls 2.4
 
-
 Rectangle {
     property var hwm
     property var lwm

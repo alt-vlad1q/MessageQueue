@@ -1,6 +1,14 @@
 #include "raii-thread.h"
 
 namespace mq {
+mq::BlockingToken::operator bool() const {
+    return !mToken;
+}
+
+void BlockingToken::cancel() {
+    mToken = true;
+}
+
 ThreadWrapper::ThreadWrapper(ThreadWrapper &&other) noexcept :
     mThread(std::move(other.mThread)),
     mToken(std::move(other.mToken)) {

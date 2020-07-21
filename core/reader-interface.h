@@ -12,8 +12,7 @@ class ReaderInterface
 {
 public:
     ReaderInterface() = delete;
-    explicit ReaderInterface(MessageQueue<MessageType> &rqueue) :
-        mMessageQueue(rqueue) {};
+    explicit ReaderInterface(MessageQueue<MessageType> &rqueue);;
     virtual ~ReaderInterface() = default;
 
     /**
@@ -23,6 +22,7 @@ public:
     void run ();
 
 protected:
+
     /**
      * @brief handle_message
      * @param message

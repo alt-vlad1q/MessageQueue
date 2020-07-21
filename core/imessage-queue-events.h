@@ -3,31 +3,18 @@
 #include <iostream>
 
 namespace mq {
-enum class Events {
-    on_start = 1,
-    on_stop,
-    on_hwm,
-    on_lwm
-};
-
 /**
- * @brief Класс содержащий состояния очереди
+ * @brief Интерфейс событий
  */
 class IMessageQueueEvents
 {
 public:
-    IMessageQueueEvents() : mState(Events::on_start) {};
     virtual ~IMessageQueueEvents() = default;
 
-    inline Events state() {
-        return mState;
-    }
-    inline void applyEvent(Events _state) {
-        mState = _state;
-    }
-
-private:
-    Events mState;
+    virtual void on_start() = 0;
+    virtual void on_stop() = 0;
+    virtual void on_hwm() = 0;
+    virtual void on_lwm() = 0;
 };
 }
 

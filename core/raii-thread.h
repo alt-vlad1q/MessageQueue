@@ -5,20 +5,14 @@
 #include <iostream>
 
 namespace mq {
-
 /**
  * @brief Блокирующий токен
  */
 class BlockingToken
 {
 public:
-    explicit operator bool() const {
-        return !mToken;
-    }
-
-    void cancel() {
-        mToken = true;
-    }
+    explicit operator bool() const;
+    void cancel();
 
 private:
     std::atomic_bool mToken {false};
